@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ЧатМоментум</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f0f13;--surface:#1a1a24;--surface2:#22222f;--border:#2e2e40;
+  --accent:#7c6cfc;--accent-glow:rgba(124,108,252,.25);
+  --text:#e8e8f0;--muted:#7777a0;--green:#4ade80;--red:#f87171;
+  --own:#3d3580;--radius:14px;
+}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.screen{display:none;width:100%;height:100dvh}
+.screen.active{display:flex}
+
+/* LOBBY */
+#lobby{flex-direction:column;align-items:center;justify-content:center;padding:24px}
+.logo{font-size:44px;margin-bottom:10px}
+.lobby-title{font-size:28px;font-weight:700;margin-bottom:6px;background:linear-gradient(135deg,#a89ffc,#7c6cfc,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.lobby-sub{font-size:14px;color:var(--muted);margin-bottom:36px;text-align:center}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;width:100%;max-width:420px}
+.label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;margin-top:20px}
+.label:first-child{margin-top:0}
+input[type=text]{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:15px;color:var(--text);font-family:inherit;outline:none;transition:border-color .2s;width:100%}
+input[type=text]::placeholder{color:var(--muted)}
+input[type=text]:focus{border-color:var(--accent)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 20px;border-radius:10px;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;border:none;transition:.15s;width:100%;margin-top:10px}
+.btn:active{transform:scale(.98)}
+.btn-p{background:var(--accent);color:#fff;box-shadow:0 0 20px var(--accent-glow)}
+.btn-p:hover{background:#8d7efd}
+.btn-o{background:transparent;color:var(--text);border:1px solid var(--border)}
+.btn-o:hover{border-color:var(--accent);color:var(--accent)}
+.btn-danger{background:#3d1010;color:var(--red);border:1px solid #7f1d1d}
+.btn-danger:hover{background:#7f1d1d}
+.divider{display:flex;align-items:center;gap:12px;margin:22px 0 6px;color:var(--muted);font-size:13px}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* CHAT */
+#chat{flex-direction:column}
+.chat-header{display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.room-avatar{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#c084fc);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.room-info{flex:1;min-width:0}
+.room-name{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.room-status{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.sdot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.sdot.green{background:var(--green)}
+.sdot.yellow{background:#facc15;animation:blink 1s infinite}
+.sdot.red{background:var(--red)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.hdr-btns{display:flex;gap:8px;align-items:center}
+.hbtn{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 13px;font-size:13px;font-weight:500;color:var(--text);cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:5px;white-space:nowrap;transition:all .15s}
+.hbtn:hover{border-color:var(--accent);color:var(--accent)}
+.hbtn.danger{border-color:#7f1d1d;color:var(--red)}
+.hbtn.danger:hover{background:#3d1010}
+.msgs{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:4px;scroll-behavior:smooth}
+.msgs::-webkit-scrollbar{width:4px}
+.msgs::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+.msg{display:flex;flex-direction:column;max-width:72%;gap:3px}
+.msg.own{align-self:flex-end;align-items:flex-end}
+.msg.other{align-self:flex-start;align-items:flex-start}
+.msg.sys{align-self:center;max-width:95%}
+.msg.gap{margin-top:8px}
+.msg-nick{font-size:12px;color:var(--muted);padding:0 6px;font-weight:500}
+.bubble{padding:9px 14px;border-radius:14px;font-size:15px;line-height:1.45;word-break:break-word}
+.msg.own .bubble{background:var(--own);border-bottom-right-radius:4px}
+.msg.other .bubble{background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:4px}
+.msg.sys .bubble{background:transparent;border:1px solid var(--border);color:var(--muted);font-size:12px;padding:5px 14px;border-radius:20px;text-align:center}
+.msg-time{font-size:11px;color:var(--muted);padding:0 6px}
+.input-area{padding:12px 16px 16px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0}
+.input-row{display:flex;gap:10px;align-items:flex-end}
+#msgInput{flex:1;resize:none;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:11px 14px;font-size:15px;color:var(--text);font-family:inherit;outline:none;max-height:120px;overflow-y:auto;transition:border-color .2s;line-height:1.4}
+#msgInput::placeholder{color:var(--muted)}
+#msgInput:focus{border-color:var(--accent)}
+.send-btn{width:44px;height:44px;border-radius:12px;background:var(--accent);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 14px var(--accent-glow);transition:.15s}
+.send-btn:hover{background:#8d7efd}
+.send-btn:active{transform:scale(.94)}
+.send-btn svg{width:20px;height:20px;fill:#fff}
+
+/* MODAL */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);z-index:100;align-items:center;justify-content:center;padding:20px}
+.modal-bg.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;width:100%;max-width:400px}
+.modal h3{font-size:17px;font-weight:700;margin-bottom:8px}
+.modal p{font-size:14px;color:var(--muted);margin-bottom:18px;line-height:1.5}
+.code-box{background:var(--surface2);border:2px solid var(--accent);border-radius:12px;padding:20px;text-align:center;font-size:34px;font-weight:700;font-family:monospace;letter-spacing:.18em;color:var(--accent);margin-bottom:16px}
+.modal-btns{display:flex;gap:10px}
+.modal-btns .btn{margin-top:0}
+
+/* ENDED OVERLAY */
+#endedOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:200;align-items:center;justify-content:center;flex-direction:column;gap:14px;text-align:center;padding:24px}
+#endedOverlay.show{display:flex}
+
+/* TOAST */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface);border:1px solid var(--border);border-radius:30px;padding:10px 20px;font-size:14px;font-weight:500;opacity:0;transition:.25s;pointer-events:none;z-index:999;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* RESTORE BANNER */
+.restore-banner{background:rgba(124,108,252,.12);border:1px solid rgba(124,108,252,.3);border-radius:12px;padding:14px 16px;margin-top:14px;font-size:13px;color:var(--text);line-height:1.5;display:none}
+.restore-banner.show{display:block}
+.restore-banner strong{color:var(--accent)}
+.restore-banner .rb-btns{display:flex;gap:8px;margin-top:10px}
+.restore-banner .rb-btns .btn{margin-top:0;flex:1;padding:9px 12px;font-size:13px}
+</style>
+</head>
+<body>
+
+<!-- LOBBY -->
+<div id="lobby" class="screen active">
+  <div class="logo">💬</div>
+  <div class="lobby-title">ЧатМоментум</div>
+  <div class="lobby-sub">Создай комнату — кинь код другу — общайтесь</div>
+  <div class="card">
+    <div class="label">Твоё имя</div>
+    <input type="text" id="nickInput" placeholder="Как тебя зовут?" maxlength="24" />
+    <div class="label">Создать новую комнату</div>
+    <button class="btn btn-p" onclick="createRoom()">✨ Создать комнату</button>
+    <div class="divider">или войти по коду</div>
+    <div class="label">Войти в комнату друга</div>
+    <input type="text" id="codeInput" placeholder="XXXXXXXX" maxlength="8"
+      style="text-transform:uppercase;font-family:monospace;letter-spacing:.12em;font-size:19px;text-align:center" />
+    <button class="btn btn-o" onclick="joinRoom()">🔗 Войти в комнату</button>
+
+    <!-- Restore banner shown if session found -->
+    <div class="restore-banner" id="restoreBanner">
+      <strong>Найдена предыдущая сессия</strong><br>
+      Комната <span id="rBannerRoom"></span> · Имя <span id="rBannerNick"></span>
+      <div class="rb-btns">
+        <button class="btn btn-p" onclick="restoreSession()">🔄 Переподключиться</button>
+        <button class="btn btn-o" onclick="dismissRestore()">Не сейчас</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CHAT -->
+<div id="chat" class="screen">
+  <div class="chat-header">
+    <div class="room-avatar">💬</div>
+    <div class="room-info">
+      <div class="room-name" id="roomTitle">Комната</div>
+      <div class="room-status">
+        <div class="sdot yellow" id="sdot"></div>
+        <span id="statusTxt">подключение…</span>
+      </div>
+    </div>
+    <div class="hdr-btns">
+      <button class="hbtn" onclick="openShare()">🔗 Позвать</button>
+      <!-- Host only: end room for everyone -->
+      <button class="hbtn danger" id="endBtn" style="display:none" onclick="endRoom()">✕ Завершить</button>
+      <!-- Guest only: leave personally -->
+      <button class="hbtn" id="leaveBtn" style="display:none" onclick="leaveRoom()">🚪 Выйти</button>
+    </div>
+  </div>
+  <div class="msgs" id="msgs"></div>
+  <div class="input-area">
+    <div class="input-row">
+      <textarea id="msgInput" placeholder="Написать…" rows="1"></textarea>
+      <button class="send-btn" onclick="sendMsg()">
+        <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- SHARE MODAL -->
+<div class="modal-bg" id="shareModal" onclick="if(event.target===this)closeShare()">
+  <div class="modal">
+    <h3>🔗 Позвать друзей</h3>
+    <p>Скинь код другу в любом мессенджере. Он вводит его в поле «Войти по коду».</p>
+    <div class="code-box" id="shareCode">—</div>
+    <div class="modal-btns">
+      <button class="btn btn-p" onclick="copyCode()">📋 Скопировать код</button>
+      <button class="btn btn-o" onclick="closeShare()">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<!-- ROOM ENDED OVERLAY -->
+<div id="endedOverlay">
+  <div style="font-size:52px">👋</div>
+  <h2 style="font-size:22px;font-weight:700">Чат завершён</h2>
+  <p style="color:var(--muted);font-size:14px">Создатель комнаты завершил сессию</p>
+  <button class="btn btn-p" style="max-width:220px;margin-top:8px" onclick="location.reload()">На главную</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ══ CONSTANTS ════════════════════════════════════════════════════════════════
+const SESS_KEY = 'chatmomentum_sess';
+const PEER_PREFIX = 'chatroom-';
+const ICE = { iceServers: [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+]};
+const MAX_RECONNECT_ATTEMPTS = 5;
+
+// ══ STATE ════════════════════════════════════════════════════════════════════
+let myNick = '', roomId = '', peer = null, conns = [], isHost = false, lastSender = null;
+let reconnectAttempts = 0;
+let reconnectTimer = null;
+
+// ══ UTILS ════════════════════════════════════════════════════════════════════
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+const ts  = () => new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'});
+const rid = () => (Math.random().toString(36).slice(2,6)+Math.random().toString(36).slice(2,6)).toUpperCase();
+
+function toast(msg, ms=2600) {
+  const e = document.getElementById('toast');
+  e.textContent = msg; e.classList.add('show');
+  setTimeout(() => e.classList.remove('show'), ms);
+}
+
+function autoResize(ta) {
+  ta.style.height = 'auto';
+  ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+}
+
+// ══ SESSION PERSISTENCE ══════════════════════════════════════════════════════
+// Saves enough info so on refresh we can restore the session automatically.
+function saveSess() {
+  try {
+    localStorage.setItem(SESS_KEY, JSON.stringify({
+      nick: myNick, roomId, isHost, ts: Date.now()
+    }));
+  } catch(e) {}
+}
+
+function loadSess() {
+  try {
+    const raw = localStorage.getItem(SESS_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    // Session valid for 6 hours
+    if (Date.now() - d.ts > 6 * 3600 * 1000) { clearSess(); return null; }
+    return d;
+  } catch(e) { return null; }
+}
+
+function clearSess() {
+  try { localStorage.removeItem(SESS_KEY); } catch(e) {}
+}
+
+// ══ RESTORE SESSION ══════════════════════════════════════════════════════════
+function checkRestore() {
+  const sess = loadSess();
+  if (!sess || !sess.roomId || !sess.nick) return;
+  document.getElementById('rBannerRoom').textContent = sess.roomId;
+  document.getElementById('rBannerNick').textContent = sess.nick;
+  document.getElementById('restoreBanner').classList.add('show');
+  // Pre-fill inputs
+  document.getElementById('nickInput').value = sess.nick;
+  if (!sess.isHost) document.getElementById('codeInput').value = sess.roomId;
+}
+
+function restoreSession() {
+  const sess = loadSess();
+  if (!sess) return;
+  myNick = sess.nick;
+  roomId = sess.roomId;
+  isHost = sess.isHost;
+  dismissRestore();
+  goChat();
+  if (isHost) {
+    addSys('♻️ Восстановление комнаты после обновления…');
+    setStatus('yellow', 'восстановление…');
+    initHostPeer();
+  } else {
+    addSys('♻️ Переподключение к комнате…');
+    setStatus('yellow', 'переподключение…');
+    initGuestPeer();
+  }
+}
+
+function dismissRestore() {
+  document.getElementById('restoreBanner').classList.remove('show');
+}
+
+// ══ CONN STATUS ══════════════════════════════════════════════════════════════
+function setStatus(color, txt) {
+  document.getElementById('sdot').className = 'sdot ' + color;
+  document.getElementById('statusTxt').textContent = txt;
+}
+
+// ══ MESSAGES ════════════════════════════════════════════════════════════════
+function addMsg(sender, text, own) {
+  const wrap = document.getElementById('msgs'), gap = lastSender !== sender;
+  lastSender = sender;
+  const d = document.createElement('div');
+  d.className = `msg ${own?'own':'other'}${gap?' gap':''}`;
+  d.innerHTML = (!own&&gap ? `<div class="msg-nick">${esc(sender)}</div>` : '') +
+    `<div class="bubble">${esc(text)}</div><div class="msg-time">${ts()}</div>`;
+  wrap.appendChild(d); wrap.scrollTop = wrap.scrollHeight;
+}
+
+function addSys(text) {
+  lastSender = null;
+  const wrap = document.getElementById('msgs'), d = document.createElement('div');
+  d.className = 'msg sys gap';
+  d.innerHTML = `<div class="bubble">${esc(text)}</div>`;
+  wrap.appendChild(d); wrap.scrollTop = wrap.scrollHeight;
+}
+
+// ══ LOBBY INIT ══════════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  checkRestore();
+
+  const ta = document.getElementById('msgInput');
+  ta.addEventListener('input', () => autoResize(ta));
+  ta.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+  });
+
+  const ci = document.getElementById('codeInput');
+  ci.addEventListener('input', () => { ci.value = ci.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); });
+  ci.addEventListener('keydown', e => { if (e.key === 'Enter') joinRoom(); });
+  document.getElementById('nickInput').addEventListener('keydown', e => { if (e.key === 'Enter') createRoom(); });
+});
+
+function getNick() {
+  const n = document.getElementById('nickInput').value.trim();
+  if (!n) { toast('Введи своё имя!'); return null; }
+  return n;
+}
+
+function goChat() {
+  document.getElementById('lobby').classList.remove('active');
+  document.getElementById('chat').classList.add('active');
+  document.getElementById('roomTitle').textContent = 'Комната ' + roomId;
+  // Show correct action button
+  if (isHost) {
+    document.getElementById('endBtn').style.display = 'flex';
+    document.getElementById('leaveBtn').style.display = 'none';
+  } else {
+    document.getElementById('endBtn').style.display = 'none';
+    document.getElementById('leaveBtn').style.display = 'flex';
+  }
+  saveSess();
+}
+
+// ══ PEER FACTORY ════════════════════════════════════════════════════════════
+function makePeer(id) {
+  const opts = { debug: 0, config: ICE };
+  try {
+    return id ? new Peer(id, opts) : new Peer(opts);
+  } catch(e) {
+    return new Peer(opts);
+  }
+}
+
+// ══ CREATE ROOM (HOST) ═══════════════════════════════════════════════════════
+function createRoom() {
+  const nick = getNick(); if (!nick) return;
+  myNick = nick; isHost = true; roomId = rid();
+  goChat();
+  addSys('Комната создана! Нажми «🔗 Позвать» и скинь код другу');
+  setStatus('yellow', 'инициализация…');
+  initHostPeer();
+}
+
+function initHostPeer() {
+  if (peer && !peer.destroyed) { try { peer.destroy(); } catch(e) {} }
+  reconnectAttempts = 0;
+
+  peer = makePeer(PEER_PREFIX + roomId);
+
+  peer.on('open', () => {
+    setStatus('green', 'комната открыта');
+    reconnectAttempts = 0;
+  });
+
+  peer.on('connection', conn => setupConn(conn, true));
+
+  peer.on('error', err => {
+    console.warn('Host peer error:', err.type);
+    if (err.type === 'unavailable-id') {
+      // ID занят — генерим новый
+      roomId = rid();
+      document.getElementById('roomTitle').textContent = 'Комната ' + roomId;
+      saveSess();
+      setTimeout(() => initHostPeer(), 500);
+    } else if (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error' || err.type === 'socket-closed') {
+      scheduleHostReconnect();
+    } else {
+      setStatus('red', 'ошибка: ' + err.type);
+      addSys('⚠️ Ошибка сервера (' + err.type + '). Переподключение…');
+      scheduleHostReconnect();
+    }
+  });
+
+  peer.on('disconnected', () => {
+    setStatus('yellow', 'переподключение…');
+    scheduleHostReconnect();
+  });
+
+  peer.on('close', () => {
+    setStatus('yellow', 'соединение закрыто');
+    scheduleHostReconnect();
+  });
+}
+
+function scheduleHostReconnect() {
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    setStatus('red', 'нет связи');
+    addSys('❌ Не удаётся подключиться к серверу. Обнови страницу — сессия восстановится.');
+    return;
+  }
+  clearTimeout(reconnectTimer);
+  const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 15000); // exponential backoff
+  reconnectAttempts++;
+  setStatus('yellow', `переподключение (${reconnectAttempts})…`);
+  reconnectTimer = setTimeout(() => {
+    if (!peer || peer.destroyed) {
+      initHostPeer();
+    } else {
+      try { peer.reconnect(); } catch(e) { initHostPeer(); }
+    }
+  }, delay);
+}
+
+// ══ JOIN ROOM (GUEST) ════════════════════════════════════════════════════════
+function joinRoom() {
+  const nick = getNick(); if (!nick) return;
+  const code = document.getElementById('codeInput').value.trim().toUpperCase();
+  if (code.length < 6) { toast('Введи код комнаты!'); return; }
+  myNick = nick; isHost = false; roomId = code;
+  goChat();
+  setStatus('yellow', 'подключение…');
+  initGuestPeer();
+}
+
+function initGuestPeer() {
+  if (peer && !peer.destroyed) { try { peer.destroy(); } catch(e) {} }
+  reconnectAttempts = 0;
+
+  peer = makePeer(null);
+
+  peer.on('open', () => {
+    reconnectAttempts = 0;
+    connectToHost();
+  });
+
+  peer.on('error', err => {
+    console.warn('Guest peer error:', err.type);
+    if (err.type === 'peer-unavailable') {
+      setStatus('red', 'комната не найдена');
+      addSys('❌ Комната не найдена. Убедись что хост онлайн и код верный.');
+    } else if (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error' || err.type === 'socket-closed') {
+      scheduleGuestReconnect();
+    } else {
+      addSys('⚠️ Ошибка (' + err.type + '). Переподключение…');
+      scheduleGuestReconnect();
+    }
+  });
+
+  peer.on('disconnected', () => {
+    setStatus('yellow', 'переподключение…');
+    scheduleGuestReconnect();
+  });
+}
+
+function connectToHost() {
+  setStatus('yellow', 'соединение с хостом…');
+  const conn = peer.connect(PEER_PREFIX + roomId, { reliable: true, serialization: 'json' });
+
+  let opened = false;
+  const timeout = setTimeout(() => {
+    if (!opened) {
+      setStatus('red', 'таймаут');
+      addSys('❌ Нет ответа от хоста. Проверь код или попроси хоста обновить страницу.');
+    }
+  }, 12000);
+
+  conn.on('open', () => {
+    opened = true;
+    clearTimeout(timeout);
+    setupConn(conn, false);
+    conn.send({ type: 'join', nick: myNick });
+    setStatus('green', 'подключён');
+    addSys('✅ Добро пожаловать!');
+    reconnectAttempts = 0;
+  });
+
+  conn.on('error', () => {
+    clearTimeout(timeout);
+    scheduleGuestReconnect();
+  });
+}
+
+function scheduleGuestReconnect() {
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    setStatus('red', 'нет связи');
+    addSys('❌ Не удаётся подключиться. Обнови страницу — сессия восстановится.');
+    return;
+  }
+  clearTimeout(reconnectTimer);
+  const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 12000);
+  reconnectAttempts++;
+  setStatus('yellow', `переподключение (${reconnectAttempts})…`);
+  reconnectTimer = setTimeout(() => {
+    if (!peer || peer.destroyed) initGuestPeer();
+    else try { peer.reconnect(); } catch(e) { initGuestPeer(); }
+  }, delay);
+}
+
+// ══ SETUP DATA CONNECTION ════════════════════════════════════════════════════
+function setupConn(conn, incoming) {
+  if (incoming) conns.push(conn);
+  else conns.push(conn);
+
+  conn.on('data', data => handleData(conn, data));
+
+  conn.on('close', () => {
+    conns = conns.filter(c => c !== conn);
+    const who = conn._nick || 'Участник';
+    addSys(who + ' покинул комнату');
+    updateStatus();
+    // Guest: if host closed — try to reconnect
+    if (!isHost && conns.length === 0) {
+      setStatus('yellow', 'хост отключился, переподключение…');
+      setTimeout(() => {
+        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS && !peer.destroyed) connectToHost();
+      }, 3000);
+    }
+  });
+
+  conn.on('error', () => addSys('⚠️ Ошибка соединения'));
+}
+
+// ══ HANDLE MESSAGES ══════════════════════════════════════════════════════════
+function handleData(fromConn, data) {
+  if (!data || !data.type) return;
+
+  switch (data.type) {
+    case 'join':
+      fromConn._nick = data.nick;
+      addSys(data.nick + ' вошёл в комнату 👋');
+      fromConn.send({ type: 'welcome', nick: myNick });
+      if (isHost) relay(fromConn, data);
+      updateStatus();
+      break;
+
+    case 'welcome':
+      fromConn._nick = data.nick;
+      addSys('В комнате: ' + data.nick);
+      updateStatus();
+      break;
+
+    case 'msg':
+      addMsg(data.nick, data.text, false);
+      if (isHost) relay(fromConn, data);
+      break;
+
+    case 'leave':
+      addSys((data.nick || fromConn._nick || 'Участник') + ' вышел из чата');
+      if (isHost) relay(fromConn, data);
+      updateStatus();
+      break;
+
+    case 'room_ended':
+      // Host ended the room — show overlay for all guests
+      clearSess();
+      document.getElementById('endedOverlay').classList.add('show');
+      break;
+  }
+}
+
+function relay(except, data) {
+  conns.forEach(c => { if (c !== except && c.open) try { c.send(data); } catch(e) {} });
+}
+
+function broadcast(data) {
+  conns.forEach(c => { if (c.open) try { c.send(data); } catch(e) {} });
+}
+
+function updateStatus() {
+  const n = conns.length;
+  const color = n > 0 ? 'green' : 'yellow';
+  const txt = n === 0
+    ? (isHost ? 'ожидание участников…' : 'только ты')
+    : (n + 1) + ' в комнате';
+  setStatus(color, txt);
+}
+
+// ══ SEND MESSAGE ═════════════════════════════════════════════════════════════
+function sendMsg() {
+  const ta = document.getElementById('msgInput'), text = ta.value.trim();
+  if (!text) return;
+  ta.value = ''; ta.style.height = 'auto';
+  addMsg(myNick, text, true);
+  broadcast({ type: 'msg', nick: myNick, text });
+}
+
+// ══ HOST: END ROOM ════════════════════════════════════════════════════════════
+function endRoom() {
+  if (!isHost) return;
+  if (!confirm('Завершить чат для всех участников?')) return;
+  broadcast({ type: 'room_ended' });
+  clearSess();
+  setTimeout(() => {
+    document.getElementById('endedOverlay').classList.add('show');
+  }, 300);
+}
+
+// ══ GUEST: LEAVE ROOM ════════════════════════════════════════════════════════
+function leaveRoom() {
+  if (!confirm('Выйти из чата?')) return;
+  broadcast({ type: 'leave', nick: myNick });
+  clearSess();
+  if (peer && !peer.destroyed) try { peer.destroy(); } catch(e) {}
+  location.reload();
+}
+
+// ══ SHARE ════════════════════════════════════════════════════════════════════
+function openShare() {
+  document.getElementById('shareCode').textContent = roomId;
+  document.getElementById('shareModal').classList.add('open');
+}
+function closeShare() { document.getElementById('shareModal').classList.remove('open'); }
+function copyCode() {
+  navigator.clipboard.writeText(roomId)
+    .then(() => { toast('Код скопирован! 🎉'); closeShare(); })
+    .catch(() => toast('Код: ' + roomId));
+}
+
+// ══ BEFORE UNLOAD ════════════════════════════════════════════════════════════
+// Save session on close/refresh so we can restore it
+window.addEventListener('beforeunload', () => {
+  // Only save if actively in chat
+  if (document.getElementById('chat').classList.contains('active')) {
+    saveSess();
+    // Notify others we're leaving (best-effort, page is closing)
+    if (!isHost) {
+      try { broadcast({ type: 'leave', nick: myNick }); } catch(e) {}
+    }
+  }
+});
+</script>
+</body>
+</html>
